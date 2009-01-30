@@ -1,0 +1,59 @@
+#!/usr/bin/env zsh
+
+DEFAULT_COMMAND="zsh"
+DIRECTORY="/tmp/dtach"
+
+
+SOCKET=
+
+trap "cleanup" SIGHUP SIGINT SIGTERM
+
+cleanup()
+{
+    mv -f $SOCKET $SOCKET:r.detached 2> /dev/null
+    exit
+}
+
+attach()
+{
+    SOCKET=$1
+    dtach -A $SOCKET -r winch $DEFAULT_COMMAND
+    cleanup
+}
+
+BASEDIR="$DIRECTORY/$1"
+
+case $# in
+    1)
+        COMMAND=$DEFAULT_COMMAND
+        ;;
+    2)
+        COMMAND=$2
+        ;;
+    *)
+        echo "Usage: $0 name [command]"
+        exit 1
+        ;;
+esac
+
+mkdir -p $BASEDIR
+
+# arrays
+DET_SOCKETS=($=`echo ${BASEDIR}/*.detached`) 2> /dev/null
+SOCKETS=($=`echo ${BASEDIR}/*`) 2> /dev/null
+
+if [ $#DET_SOCKETS -gt 0 ]; then
+    SOCKET=$DET_SOCKETS[1]:r.attached
+    echo "mv $DET_SOCKETS[1] $SOCKET"
+    mv $DET_SOCKETS[1] $SOCKET
+    attach $SOCKET
+else
+    i=0
+    while [ true ]; do
+        if [ $#SOCKETS -ne 0 -a $SOCKETS[(i)$BASEDIR/$i.(detached|attached)] -le $#SOCKETS ]; then
+            let i++
+        else
+            attach $BASEDIR/$i.attached
+        fi
+    done
+fi
