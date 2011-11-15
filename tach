@@ -17,7 +17,7 @@ cleanup()
 attach()
 {
     SOCKET=$1
-    dtach -A $SOCKET -r winch $DEFAULT_COMMAND
+    dtach -z -A $SOCKET -r winch $DEFAULT_COMMAND
     cleanup
 }
 
