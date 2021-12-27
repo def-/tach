@@ -1,18 +1,9 @@
 #!/usr/bin/env zsh
 
+PATH=/opt/homebrew/bin:$PATH
 DEFAULT_COMMAND="zsh"
-DIRECTORY="/tmp/dtach"
-
-
+DIRECTORY="$HOME/.dtach"
 SOCKET=
-
-trap "cleanup" SIGHUP SIGINT SIGTERM
-
-cleanup()
-{
-    mv -f $SOCKET $SOCKET:r.detached 2> /dev/null
-    exit
-}
 
 attach()
 {
@@ -20,8 +11,6 @@ attach()
     dtach -A $SOCKET -z -r winch $DEFAULT_COMMAND
     cleanup
 }
-
-BASEDIR="$DIRECTORY/$1"
 
 case $# in
     1)
@@ -36,7 +25,27 @@ case $# in
         ;;
 esac
 
+BASEDIR="$DIRECTORY/$1"
+LOCK_FILE="$BASEDIR/.lock"
+
 mkdir -p $BASEDIR
+
+trap "cleanup" SIGHUP SIGINT SIGTERM
+
+cleanup()
+{
+    mv -f $SOCKET $SOCKET:r.detached 2> /dev/null
+    rm -f "$LOCK_FILE"
+    exit
+}
+
+# noclobber prevents the '>' from overwriting an existing lock file.
+while ! (set -o noclobber; echo $$ > "$LOCK_FILE"); do
+  echo "$BASEDIR is already locked by the process with the PID \
+$(cat "$LOCK_FILE"). Remove $LOCK_FILE to unlock manually. \
+Trying again in 0.1 s."
+  sleep 0.1
+done
 
 # arrays
 DET_SOCKETS=($=`echo ${BASEDIR}/*.detached`) 2> /dev/null
@@ -46,6 +55,7 @@ if [ $#DET_SOCKETS -gt 0 ]; then
     SOCKET=$DET_SOCKETS[1]:r.attached
     echo "mv $DET_SOCKETS[1] $SOCKET"
     mv $DET_SOCKETS[1] $SOCKET
+    rm -f "$LOCK_FILE"
     attach $SOCKET
 else
     i=0
@@ -53,6 +63,7 @@ else
         if [ $#SOCKETS -ne 0 -a $SOCKETS[(i)$BASEDIR/$i.(detached|attached)] -le $#SOCKETS ]; then
             let i++
         else
+            rm -f "$LOCK_FILE"
             attach $BASEDIR/$i.attached
         fi
     done
